@@ -1,0 +1,86 @@
+def buildDir = './build'
+def objectsDir = './objects'
+def packagesDir = buildDir + '/packages'
+
+def namespace = 'httpd'
+
+def nexus = ''
+
+pipeline {
+    agent {
+        node {
+            label 'maven' 
+        }
+    }
+    stages {
+        stage('Checkout SCM') {
+            steps {
+                checkout scm
+            }
+        }
+        stage('Print Current Directory') {
+            steps {
+                script {
+                    sh "ls"
+                }
+            }
+        }
+        stage('Create OpenShift Objects') {
+            steps {
+                script {
+                    openshift.withCluster() {
+                        openshift.withProject(namespace) {
+                            openshift.apply("-f " + objectsDir)
+                        }
+                    }
+                }
+            }
+        }
+        stage('Download Packages') {
+            steps {
+                script {
+                    sh "curl -o " + packagesDir + "/index.html -k https://raw.githubusercontent.com/golang/example/master/appengine-hello/static/index.html"
+                }
+            }
+        }
+        stage('Start Build') {
+            steps {
+                script {
+                    openshift.withCluster() {
+                        openshift.withProject(namespace) {
+                            openshift.selector("bc", "httpd-ex").startBuild("--wait=true")
+                            // openshift.selector("bc", "httpd").startBuild("--from-file=" + buildDir, "--wait=true")
+                        }
+                    }
+                }
+            }
+        }
+        stage('Rollout ') {
+            steps {
+            script {
+                    openshift.withCluster() {
+                        openshift.withProject() {
+                            def rm = openshift.selector("dc", "httpd").rollout().latest()
+                            timeout(5) { 
+                                openshift.selector("dc", "httpd").related('pods').untilEach(1) {
+                                    return (it.object().status.phase == "Running")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        stage('tag') {
+            steps {
+                script {
+                    openshift.withCluster() {
+                        openshift.withProject(namespace) {
+                            openshift.tag("httpd:latest", "httpd-prod:latest") 
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

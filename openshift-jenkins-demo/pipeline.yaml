@@ -1,0 +1,14 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: pipeline
+spec:
+  source:
+    git:
+      ref: master
+      uri: https://github.com/franaerospace/openshift-jenkins-demo.git
+    type: Git
+  strategy:
+    jenkinsPipelineStrategy:
+      jenkinsfilePath: Jenkinsfile
+    type: JenkinsPipeline
